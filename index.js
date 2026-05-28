@@ -16,21 +16,31 @@ app.get('/webhook', (req, res) => {
 
 app.post('/webhook', async (req, res) => {
   const body = req.body;
+  console.log('Webhook recebido:', JSON.stringify(body));
+  
   if (body.object === 'instagram') {
     for (const entry of body.entry || []) {
       for (const event of entry.messaging || []) {
         if (event.message && !event.message.is_echo) {
           const senderId = event.sender.id;
           const text = event.message.text;
+          console.log(`Mensagem recebida de ${senderId}: ${text}`);
           if (text) {
-            const reply = await askClaude(text);
-            await sendMessage(senderId, reply);
+            try {
+              const reply = await askClaude(text);
+              await sendMessage(senderId, reply);
+              console.log(`Resposta enviada para ${senderId}: ${reply}`);
+            } catch (err) {
+              console.error('Erro ao processar mensagem:', err);
+            }
           }
         }
       }
     }
+    res.sendStatus(200);
+  } else {
+    res.sendStatus(404);
   }
-  res.sendStatus(200);
 });
 
 async function askClaude(userMessage) {
@@ -44,23 +54,30 @@ async function askClaude(userMessage) {
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 500,
-      system: 'Você é um assistente de atendimento ao cliente do Instagram. Responda de forma simpática, breve e profissional em português.',
+      system: 'Você é um assistente de atendimento ao cliente do Instagram da Galera Fit Life LTDA. Responda de forma simpática, breve e profissional em português.',
       messages: [{ role: 'user', content: userMessage }]
     })
   });
   const data = await response.json();
-  return data.content[0].text;
+  console.log('Resposta Claude:', JSON.stringify(data));
+  if (data.content && data.content[0]) {
+    return data.content[0].text;
+  }
+  throw new Error('Resposta inválida da API Claude');
 }
 
 async function sendMessage(recipientId, text) {
-  await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
+  const url = `https://graph.facebook.com/v21.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`;
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       recipient: { id: recipientId },
-      message: { text }
+      message: { text: text }
     })
   });
+  const data = await response.json();
+  console.log('Resposta envio mensagem:', JSON.stringify(data));
 }
 
 const PORT = process.env.PORT || 3000;
